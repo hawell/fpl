@@ -9,7 +9,7 @@ VERSION = $(MAJOR).$(MINOR).$(PATCH)
 STATICTARGET = $(NAME)-$(VERSION).a
 DYNAMICTARGET = lib$(NAME)-$(VERSION).so
 
-CFLAGS = -std=c99 -ggdb3 -W -Wall
+CFLAGS = -std=c99 -ggdb3 -W -Wall -fPIC
 
 SRCS = convolution.c image.c filter.c process.c \
 	linear.c config.c clahe.c morph.c directional.c enhance.c
