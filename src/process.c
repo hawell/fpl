@@ -214,7 +214,7 @@ int ridge_orientation(image* img, int radius)
 	return 0;
 }
 
-get_background(image* img, int size, image** bg)
+void get_background(image* img, int size, image** bg)
 {
 
 }
