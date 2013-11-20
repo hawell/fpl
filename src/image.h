@@ -20,50 +20,21 @@
 #ifndef IMAGE_H_
 #define IMAGE_H_
 
-#define IMAGE_DATA_MAIN					0
-#define IMAGE_DATA_GRADIENT				1
-#define IMAGE_DATA_LRO					2
-
-#define IMAGE_STATE_RAW					0
-#define IMAGE_STATE_RAW_ENHANCED		1
-#define IMAGE_STATE_BINARY				2
-#define IMAGE_STATE_BINARY_ENHANCED		3
-#define IMAGE_STATE_THINNED				4
-
-#define IMAGE_FLAG_HAS_LRO				1
-#define IMAGE_FLAG_HAS_LRF				2
-#define IMAGE_FLAG_HAS_GRAD				4
-
 typedef struct {
 	int width, height;
+	int len;
+	int max_val;
 	int *data;
 } mat;
 
-typedef struct {
-	int width, height;
-	int *data;
-	int len;
-	int max_val;
+mat* new_image(int w, int h, int m);
+mat* clone_image(mat* img);
 
-	unsigned int state;
-	unsigned int flags;
+void free_image(mat* img);
 
-	mat grad;
+int load_from_file(const char* file_name, mat** img);
+int save_to_file(const char* file_name, mat* img);
 
-	int lro_radius;
-	mat lro_dir;
-	mat lro_rate;
-
-	mat lrf;
-} image;
-
-image* new_image(int w, int h, int m);
-image* clone_image(image* img);
-
-void free_image(image* img);
-
-int load_from_file(char* file_name, image** img);
-int save_to_file(char* file_name, image* img, int img_data);
-int save_data(char* file_name, int* data, int w, int h, int max_val);
+int resize(mat* img, int width, int height);
 
 #endif /* IMAGE_H_ */

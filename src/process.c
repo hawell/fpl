@@ -18,11 +18,9 @@
  */
 
 #include "process.h"
-#include "filter.h"
-#include "linear.h"
 #include "config.h"
-#include "morph.h"
-#include "enhance.h"
+#include "mathfuncs.h"
+#include "clahe.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,196 +28,151 @@
 #include <math.h>
 #include <string.h>
 
-#define INF		2000000000
+static int disk5[] = {
+	0, 0, 1, 1, 1, 1, 1, 0, 0,
+	0, 1, 1, 1, 1, 1, 1, 1, 0,
+	1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1,
+	0, 1, 1, 1, 1, 1, 1, 1, 0,
+	0, 0, 1, 1, 1, 1, 1, 0, 0
+};
 
-void gradient(image* img, int kernel)
+void strel(int el, int size, mat** se)
+{
+	mat* res = malloc(sizeof(mat));
+	res->data = malloc(81 * sizeof(int));
+	res->width = 9;
+	res->height = 9;
+	memcpy(res->data, disk5, 81*sizeof(int));
+	*se = res;
+}
+
+
+void dilate(mat* img, mat* se)
+{
+	int cx = se->width/2;
+	int cy = se->height/2;
+
+	int *data = malloc(img->width*img->height * sizeof(int));
+
+	for (int i=0; i<img->height; i++)
+		for (int j=0; j<img->width; j++)
+		{
+			int max = 0;
+			for (int k=0; k<se->height; k++)
+				for (int l=0; l<se->width; l++)
+				{
+					int x = j - (l-cx);
+					int y = i - (k-cy);
+					if (x<img->width && x>=0 && y<img->height && y>=0)
+					{
+						if (img->data[y*img->width + x]*se->data[k*se->width+l] > max)
+							max = img->data[y*img->width + x];
+					}
+				}
+			data[i*img->width + j] = max;
+		}
+	memcpy(img->data, data, img->width*img->height*sizeof(int));
+	free(data);
+}
+
+void erode(mat* img, mat* se)
+{
+	int cx = se->width/2;
+	int cy = se->height/2;
+
+	int *data = malloc(img->width*img->height * sizeof(int));
+
+	for (int i=0; i<img->height; i++)
+		for (int j=0; j<img->width; j++)
+		{
+			int min = 255;
+			for (int k=0; k<se->height; k++)
+				for (int l=0; l<se->width; l++)
+				{
+					int x = j - (l-cx);
+					int y = i - (k-cy);
+					if (x<img->width && x>=0 && y<img->height && y>=0)
+					{
+						if (img->data[y*img->width + x]*se->data[k*se->width+l]>0 && img->data[y*img->width + x]*se->data[k*se->width+l]<min)
+							min = img->data[y*img->width + x];
+					}
+				}
+			data[i*img->width + j] = min;
+		}
+	memcpy(img->data, data, img->width*img->height*sizeof(int));
+	free(data);
+}
+
+void gradient_x(mat* img_in, mat** img_out, int kernel)
+{
+	mat *grad_x;
+
+	convolve(img_in, &grad_x, kernel, DIRECTION_HORIZONTAL);
+
+	for (int i=0; i<img_in->len; i++)
+			grad_x->data[i] = sqrt(grad_x->data[i]*grad_x->data[i]);
+
+	normalize(grad_x, 0, img_in->max_val);
+
+	*img_out = grad_x;
+}
+
+void gradient_y(mat* img_in, mat** img_out, int kernel)
+{
+	mat *grad_y;
+
+	convolve(img_in, &grad_y, kernel, DIRECTION_VERTICAL);
+
+	for (int i=0; i<img_in->len; i++)
+			grad_y->data[i] = sqrt(grad_y->data[i]*grad_y->data[i]);
+
+	normalize(grad_y, 0, img_in->max_val);
+
+	*img_out = grad_y;
+}
+
+void gradient(mat* img_in, mat** img_out, int kernel)
 {
 	mat *grad_x, *grad_y;
 
-	if (!(img->flags & IMAGE_FLAG_HAS_GRAD))
-		img->grad.data = malloc(img->width*img->height*sizeof(int));
-	img->grad.width = img->width;
-	img->grad.height = img->height;
+	mat* out = clone_image(img_in);
 
-	filter(img, &grad_x, kernel, DIRECTION_HORIZONTAL);
-	filter(img, &grad_y, kernel, DIRECTION_VERTICAL);
+	convolve(img_in, &grad_x, kernel, DIRECTION_HORIZONTAL);
+	convolve(img_in, &grad_y, kernel, DIRECTION_VERTICAL);
 
-	for (int i=0; i<img->width*img->height; i++)
-		img->grad.data[i] = sqrt(grad_x->data[i]*grad_x->data[i] + grad_y->data[i]*grad_y->data[i]);
-	normalize(&img->grad, 0, img->max_val);
+	for (int i=0; i<img_in->len; i++)
+		out->data[i] = sqrt(grad_x->data[i]*grad_x->data[i] + grad_y->data[i]*grad_y->data[i]);
+	normalize(out, 0, img_in->max_val);
 
-	img->flags |= IMAGE_FLAG_HAS_GRAD;
+	*img_out = out;
 }
 
-int ridge_dir(mat* m, int cx, int cy, int radius, int *a)
+void sharpen(mat* img_in, mat** img_out)
 {
-	int lx[radius*2+1], ly[radius*2+1];
+	mat* out = clone_image(img_in);
 
-	int stdev[180];
+	convolve(img_in, &out, KERNEL_LAPLACIAN3x3, DIRECTION_NONE);
+	normalize(out, 0, img_in->max_val);
 
-	for (int a=0; a<180; a++)
-	{
-		stdev[a] = 0;
-		get_line(cx, cy, radius, a, lx, ly);
+	for (int i=0; i<img_in->len; i++)
+		out->data[i] = img_in->data[i] + out->data[i];
+	normalize(out, 0, img_in->max_val);
+	histogram_equalization(out);
 
-		float mean = 0;
-		for (int i=0; i<2*radius+1; i++)
-		{
-			mean += m->data[ly[i]*m->width + lx[i]];
-		}
-		mean /= 2*radius+1;
-		for (int i=0; i<2*radius+1; i++)
-			stdev[a] += (m->data[ly[i]*m->width + lx[i]] - mean)*(m->data[ly[i]*m->width + lx[i]] - mean);
-		stdev[a] /= 2*radius+1;
-	}
-
-	int amin=0, amax=0, min=INF, max=0;
-
-	for (int i=0; i<180; i++)
-	{
-		if (stdev[i] < min)
-		{
-			min = stdev[i];
-			amin = i;
-		}
-		if (stdev[i] > max)
-		{
-			max = stdev[i];
-			amax = i;
-		}
-	}
-
-	*a = amin;
-
-	return abs(amin - amax);
+	*img_out = out;
 }
 
-int angle_mean(int a, int b)
+void negative(mat* img)
 {
-	if (a > b)
-	{
-		int t = a;
-		a = b;
-		b = t;
-	}
-
-	if (b - a >= 90)
-		return ((a+b+180)/2) % 180;
-	else
-		return (a+b) / 2;
+	for (int i=0; i<img->len; i++)
+		img->data[i] = img->max_val - img->data[i];
 }
 
-void regularize(int* d, int w, int h, int max_diff)
-{
-	for (int i=1; i<h-1; i++)
-		for (int j=0; j<w; j++)
-		{
-			int mean = angle_mean(d[(i-1)*w + j], d[(i+1)*w + j]);
-			if ((d[i*w+j]-d[(i-1)*w+j]>max_diff || d[i*w+j]-d[(i-1)*w+j]<-max_diff) &&
-				(d[i*w+j]-d[(i+1)*w+j]>max_diff || d[i*w+j]-d[(i+1)*w+j]<-max_diff)
-				)
-				d[i*w+j] = mean;
-
-		}
-
-	for (int i=0; i<h; i++)
-		for (int j=1; j<w-1; j++)
-		{
-			int mean = angle_mean(d[i*w + j-1], d[i*w + j+1]);
-			if ((d[i*w+j]-d[i*w+j-1]>max_diff || d[i*w+j]-d[i*w+j-1]<-max_diff) &&
-				(d[i*w+j]-d[i*w+j+1]>max_diff || d[i*w+j]-d[i*w+j+1]<-max_diff)
-				)
-				d[i*w+j] = mean;
-		}
-
-	for (int i=0; i<h; i++)
-		for (int j=1; j<w-1; j++)
-		{
-			int mean = angle_mean(d[i*w + j-1], d[i*w + j+1]);
-			if (d[i*w + j] - mean > max_diff || d[i*w + j] - mean < -max_diff)
-				d[i*w+j] = mean;
-		}
-
-	for (int i=1; i<h-1; i++)
-		for (int j=0; j<w; j++)
-		{
-			int mean = angle_mean(d[(i-1)*w + j], d[(i+1)*w + j]);
-			if (d[i*w + j] - mean > max_diff || d[i*w + j] - mean < -max_diff)
-				d[i*w+j] = mean;
-		}
-
-}
-
-void regularize2(int* d, int w, int h)
-{
-	for (int i=1; i<h-1; i++)
-		for (int j=1; j<w-1; j++)
-		{
-			int d1,d2,d3,d4;
-			d1 = angle_mean(d[(i-1)*w + j-1], d[(i-1)*w + j+1]);
-			d2 = angle_mean(d[(i+1)*w + j-1], d[(i+1)*w + j+1]);
-			d3 = angle_mean(d[(i-1)*w + j-1], d[(i+1)*w + j-1]);
-			d4 = angle_mean(d[(i-1)*w + j+1], d[(i+1)*w + j+1]);
-
-			d1 = angle_mean(d1, d2);
-			d3 = angle_mean(d3, d4);
-
-			d[i*w +j] = angle_mean(d1, d3);
-		}
-}
-
-int ridge_orientation(image* img, int radius)
-{
-	int w = img->width/(2*radius+1);
-	int h = img->height/(2*radius+1);
-
-	if (!(img->flags & IMAGE_FLAG_HAS_GRAD))
-		gradient(img, KERNEL_NRIGO7x5);
-
-	if (img->flags & IMAGE_FLAG_HAS_LRO)
-	{
-		free(img->lro_dir.data);
-		free(img->lro_rate.data);
-	}
-
-	img->lro_dir.data = malloc(w*h*sizeof(int));
-	img->lro_dir.width = w;
-	img->lro_dir.height = h;
-
-	img->lro_rate.data = malloc(w*h*sizeof(int));
-	img->lro_rate.width = w;
-	img->lro_rate.height = h;
-
-	for (int i=0; i<h; i++)
-	{
-		for (int j=0; j<w; j++)
-		{
-			int cx = j*(2*radius+1) + radius;
-			int cy = i*(2*radius+1) + radius;
-
-			int ang;
-			img->lro_rate.data[i*w + j] = ridge_dir(&img->grad, cx, cy, radius, &ang);
-
-			img->lro_dir.data[i*w + j] = ang;
-		}
-	}
-
-	regularize2(img->lro_dir.data, w, h);
-	regularize(img->lro_dir.data, w, h, 30);
-
-	img->lro_radius = radius;
-
-	img->flags |= IMAGE_FLAG_HAS_LRO;
-
-	return 0;
-}
-
-void get_background(image* img, int size, image** bg)
-{
-
-}
-
-void binarize(image* img, int size)
+void binarize(mat* img, int size)
 {
 	int nx = img->width%size?img->width/size+1:img->width/size;
 	int ny = img->height%size?img->height/size+1:img->height/size;
@@ -250,10 +203,9 @@ void binarize(image* img, int size)
 
 	img->max_val = 1;
 
-	img->state = IMAGE_STATE_BINARY;
 }
 
-void binarize2(image* img, int threshold)
+void binarize2(mat* img, int threshold)
 {
 	for (int i=0; i<img->len; i++)
 		if (img->data[i]<threshold)
@@ -262,112 +214,182 @@ void binarize2(image* img, int threshold)
 			img->data[i] = 1;
 
 	img->max_val = 1;
-	img->state = IMAGE_STATE_BINARY;
 }
 
-void thin(image* img)
+void normalize(mat* m, int min_val, int max_val)
 {
-	int *m = calloc(img->len, sizeof(int));
+	int max=min_val, min=max_val;
+	int len = m->width*m->height;
 
-	for (int i=0; i<img->width; i++)
+	for (int i=0; i<len; i++)
 	{
-		img->data[i] = 0;
-		img->data[img->width*(img->height-1) + i] = 0;
-	}
-	for (int i=0; i<img->height; i++)
-	{
-		img->data[img->width*i] = 0;
-		img->data[img->width*(i+1) - 1] = 0;
+		if (m->data[i] > max) max = m->data[i];
+		if (m->data[i] < min) min = m->data[i];
 	}
 
-	int c = 0;
-	while (1)
+	if (max!=max_val || min!=min_val)
 	{
-		c = 0;
-		for (int i=1; i<img->height; i++)
-			for (int j=1; j<img->width; j++)
-				if (img->data[i*img->width + j])
-				{
-					int p[9];
-					p[0] = img->data[i*img->width + j];
-					p[1] = img->data[(i-1)*img->width + j];
-					p[2] = img->data[(i-1)*img->width + j+1];
-					p[3] = img->data[i*img->width + j+1];
-					p[4] = img->data[(i+1)*img->width + j+1];
-					p[5] = img->data[(i+1)*img->width + j];
-					p[6] = img->data[(i+1)*img->width + j-1];
-					p[7] = img->data[i*img->width + j-1];
-					p[8] = img->data[(i-1)*img->width + j-1];
-
-					int A=0;
-					for (int k=1; k<8; k++)
-						if (p[k]==0 && p[k+1]==1) A++;
-					if (p[8]==0 && p[1]==1) A++;
-					int B=0;
-					for (int k=1; k<9; k++)
-						B += p[k];
-
-					if (A==1 && B>=2 && B<=6 && p[1]*p[3]*p[5]==0 && p[3]*p[5]*p[7]==0)
-					{
-						c++;
-						m[i*img->width + j] = 1;
-					}
-				}
-
-		if (c == 0)
-			break;
-
-		for (int i=0; i<img->len; i++)
-			if (m[i])
-			{
-				img->data[i] = 0;
-				m[i] = 0;
-			}
-
-		c = 0;
-		for (int i=1; i<img->height; i++)
-			for (int j=1; j<img->width; j++)
-				if (img->data[i*img->width + j])
-				{
-					int p[9];
-					p[0] = img->data[i*img->width + j];
-					p[1] = img->data[(i-1)*img->width + j];
-					p[2] = img->data[(i-1)*img->width + j+1];
-					p[3] = img->data[i*img->width + j+1];
-					p[4] = img->data[(i+1)*img->width + j+1];
-					p[5] = img->data[(i+1)*img->width + j];
-					p[6] = img->data[(i+1)*img->width + j-1];
-					p[7] = img->data[i*img->width + j-1];
-					p[8] = img->data[(i-1)*img->width + j-1];
-
-					int A=0;
-					for (int k=1; k<8; k++)
-						if (p[k]==0 && p[k+1]==1) A++;
-					if (p[8]==0 && p[1]==1) A++;
-					int B=0;
-					for (int k=1; k<9; k++)
-						B += p[k];
-
-					if (A==1 && B>=2 && B<=6 && p[1]*p[3]*p[7]==0 && p[1]*p[5]*p[7]==0)
-					{
-						c++;
-						m[i*img->width + j] = 1;
-					}
-				}
-
-		if (c == 0)
-			break;
-
-		for (int i=0; i<img->len; i++)
-			if (m[i])
-			{
-				img->data[i] = 0;
-				m[i] = 0;
-			}
-
+		max -= min;
+		for (int i=0; i<len; i++)
+		{
+			m->data[i] -= min;
+			m->data[i] = (m->data[i]*max_val) / max;
+		}
 	}
-
-	free(m);
-
-	img->state = IMAGE_STATE_THINNED;
 }
+
+void histogram_equalization(mat* img)
+{
+	int p[256];
+	for (int i=0; i<256; i++) p[i] = 0;
+	for (int i=0; i<img->len; i++)
+		p[img->data[i]]++;
+
+	int cdf[256];
+	cdf[0] = p[0];
+	for (int i=1; i<256; i++)
+		cdf[i] = cdf[i-1] + p[i];
+
+	int min=0;
+	while (cdf[min] == 0) min++;
+
+	int h[256];
+	for (int i=0; i<256; i++)
+	{
+		if (cdf[i])
+			h[i] = ((float)(cdf[i] - cdf[min]) / (float)(img->len - cdf[min]))*255 + 0.5;
+		else
+			h[i] = 0;
+	}
+
+	for (int i=0; i<img->len; i++)
+		img->data[i] = h[img->data[i]];
+
+}
+
+void clahe(mat* img, int x_count, int y_count, float clip_limit)
+{
+	unsigned char *tmp = malloc(img->width*img->height);
+	for (int i=0; i<img->len; i++)
+		tmp[i] = img->data[i];
+
+	CLAHE(tmp, img->width, img->height, 0, img->max_val, x_count, y_count, clahe_bin_count, clip_limit);
+
+	for (int i=0; i<img->len; i++)
+		img->data[i] = tmp[i];
+
+	free(tmp);
+}
+
+void normalization_enhance(mat* img, int m0, int v0)
+{
+	int m=0,v;
+
+	for (int i=0; i<img->len; i++)
+		m += img->data[i];
+	m /= img->len;
+
+
+}
+
+float noise_variance(mat* img)
+{
+	mat *lap;
+	convolve(img, &lap, KERNEL_LAPLACIAN3x3, DIRECTION_NONE);
+
+	float sum=0;
+	for (int i=0; i<img->len; i++)
+		sum += abs(lap->data[i]);
+
+	float stdev = sqrt(PI/2)*sum/(float)(6*img->width*img->height);
+
+	return stdev*stdev;
+}
+
+void wiener_filter(mat* img, int size)
+{
+	float nv = 0.04;//noise_variance(img);
+
+	int* w = calloc(img->len, sizeof(int));
+
+	for (int i=1; i<img->height-1; i++)
+		for (int j=1; j<img->width-1; j++)
+		{
+			float m=0;
+			for (int k=-1; k<=1; k++)
+				for (int l=-1; l<=1; l++)
+					m += img->data[(i+k)*img->width + (j+l)];
+			m /= 9.0;
+
+
+			float v=0;
+			for (int k=-1; k<=1; k++)
+				for (int l=-1; l<=1; l++)
+					v += img->data[(i+k)*img->width + (j+l)]*img->data[(i+k)*img->width + (j+l)] - m*m;
+			v /= 9.0;
+
+			w[i*img->width + j] = m + ((v - nv)/v)*(img->data[i*img->width+j] - m);
+		}
+
+	for (int i=0; i<img->len; i++)
+		img->data[i] = w[i];
+}
+
+void remove_block(mat* img, int x, int y, int size, int threshold)
+{
+	if (x<0 || y<0 || x>img->width-size || y>img->height-size)
+		return;
+
+	int m = 0;
+	for (int i=y; i<y+size; i++)
+		for (int j=x; j<x+size; j++)
+			m += img->data[i*img->width + j];
+
+	if (m == 0)
+		return;
+
+	m /= size*size;
+
+	if (m < threshold)
+	{
+		for (int i=y; i<y+size; i++)
+			for (int j=x; j<x+size; j++)
+				img->data[i*img->width + j] = 0;
+		remove_block(img, x+size, y, size, threshold);
+		remove_block(img, x-size, y, size, threshold);
+		remove_block(img, x, y+size, size, threshold);
+		remove_block(img, x, y-size, size, threshold);
+	}
+}
+
+void remove_background(mat* img, int size)
+{
+	mat m;
+	m.width = img->width;
+	m.height = img->height;
+	m.data = malloc(img->len*sizeof(int));
+	memcpy(m.data, img->data, img->len*sizeof(int));
+
+	mat *se;
+	strel(rmbg_strel_type, rmbg_strel_size, &se);
+
+	for (int i=0; i<erode_dilate_count; i++)
+	{
+		erode(&m, se);
+	}
+	//save_to_file("1.pgm", &m);
+
+	for (int i=0; i<erode_dilate_count; i++)
+	{
+		dilate(&m, se);
+	}
+	//save_to_file("2.pgm", &m);
+
+	for (int i=0; i<img->len; i++)
+	{
+		img->data[i] -= m.data[i];
+		if (img->data[i] < 0)
+			img->data[i] = 0;
+	}
+}
+

@@ -11,8 +11,7 @@ DYNAMICTARGET = lib$(NAME)-$(VERSION).so
 
 CFLAGS = -std=c99 -ggdb3 -W -Wall -fPIC
 
-SRCS = convolution.c image.c filter.c process.c \
-	linear.c config.c clahe.c morph.c directional.c enhance.c
+SRCS = clahe.c config.c convolution.c fingerprint.c image.c lro.c mathfuncs.c process.c 
 HDRS = $(SRCS:.c=.h)
 OBJS = $(SRCS:.c=.o)
 

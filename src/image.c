@@ -18,8 +18,6 @@
  */
 
 #include "image.h"
-#include "linear.h"
-#include "filter.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -27,59 +25,41 @@
 #include <math.h>
 #include <assert.h>
 
-image* new_image(int w, int h, int m)
+mat* new_image(int w, int h, int m)
 {
-	image* img = malloc(sizeof(image));
+	mat* img = malloc(sizeof(mat));
 	img->width = w;
 	img->height = h;
 	img->len = w*h;
 	img->max_val = m;
-
-	img->state = IMAGE_STATE_RAW;
-	img->flags = 0;
 
 	img->data = calloc(w*h, sizeof(int));
 
 	return img;
 }
 
-image* clone_image(image* img)
+mat* clone_image(mat* img)
 {
-	image* out = malloc(sizeof(image));
+	mat* out = malloc(sizeof(mat));
 	out->width = img->width;
 	out->height = img->height;
 	out->len = img->len;
 	out->max_val = img->max_val;
-
-	out->state = IMAGE_STATE_RAW;
-	out->flags = 0;
 
 	out->data = calloc(img->width*img->height, sizeof(int));
 
 	return out;
 }
 
-void free_image(image* img)
+void free_image(mat* img)
 {
 	free(img->data);
-
-	if (img->flags & IMAGE_FLAG_HAS_GRAD)
-		free(img->grad.data);
-
-	if (img->flags & IMAGE_FLAG_HAS_LRO)
-	{
-		free(img->lro_dir.data);
-		free(img->lro_rate.data);
-	}
-
-	if (img->flags & IMAGE_FLAG_HAS_LRF)
-		free(img->lrf.data);
 
 	free(img);
 }
 
 
-int load_from_file(char* file_name, image** img)
+int load_from_file(const char* file_name, mat** img)
 {
 	FILE* f = fopen(file_name, "r");
 	if (f == NULL)
@@ -124,96 +104,52 @@ int load_from_file(char* file_name, image** img)
 	return 0;
 }
 
-int save_data(char* file_name, int* data, int w, int h, int max_val)
+int save_to_file(const char* file_name, mat* img)
 {
-	FILE* f = fopen(file_name, "w");
+	FILE* f = fopen(file_name, "w+");
 	if (f == NULL)
 		return 1;
 
-	int len = w*h;
-
-	fprintf(f, "P5 %d %d %d\n", w, h, max_val);
+	fprintf(f, "P5 %d %d %d\n", img->width, img->height, img->max_val);
 
 	unsigned char buff[10000];
 	int pos,p=0;
-	for (int i=0; i<len/10000; i++)
+	for (int i=0; i<img->len/10000; i++)
 	{
 		pos=0;
 		for (int j=0; j<10000; j++)
-			buff[pos++] = data[p++];
+			buff[pos++] = img->data[p++];
 		fwrite(buff, 1, 10000, f);
 	}
 	pos=0;
-	for (int j=0; j<len%10000; j++)
-		buff[pos++] = data[p++];
-	fwrite(buff, 1, len%10000, f);
+	for (int j=0; j<img->len%10000; j++)
+		buff[pos++] = img->data[p++];
+	fwrite(buff, 1, img->len%10000, f);
 
 	fclose(f);
 
 	return 0;
-
 }
 
-int save_orientation_image(char* file_name, image* img)
+int resize(mat* img, int width, int height)
 {
-	image* tmp = clone_image(img);
+	int* data = malloc(width*height*sizeof(int));
 
-	int r = img->lro_radius;
-	int s = r*2 + 1;
-
-	int lx[s], ly[s];
-
-	int w = img->lro_dir.width;
-	int h = img->lro_dir.height;
-
-	printf("%d %d %d %d\n", w, h, r, s);
-
-	for (int i=0; i<h; i++)
-	{
-		for (int j=0; j<w; j++)
+	for (int i=0; i<height; i++)
+		for (int j=0; j<width; j++)
 		{
-			int cx = j*s + r;
-			int cy = i*s + r;
+			int x = j*img->width/width;
+			int y = i*img->height/height;
 
-			int ang = img->lro_dir.data[i*w + j];
-			printf("%d\n", ang);
-			get_line(cx, cy, r, ang, lx, ly);
-
-			for (int p=0; p<s; p++)
-			{
-				printf("%d %d %d %d\n", tmp->width, p, ly[p], lx[p]);
-				tmp->data[ly[p]*tmp->width + lx[p]] = 255;
-			}
+			data[width*i + j] = img->data[y*img->width + x];
 		}
-	}
 
-	save_data(file_name, tmp->data, tmp->width, tmp->height,  tmp->max_val);
-	free_image(tmp);
+	free(img->data);
+
+	img->width = width;
+	img->height = height;
+	img->len = width*height;
+	img->data = data;
 
 	return 0;
-}
-
-int save_to_file(char* file_name, image* img, int img_data)
-{
-	switch (img_data)
-	{
-		case IMAGE_DATA_MAIN:
-			return save_data(file_name, img->data, img->width, img->height, img->max_val);
-		break;
-
-		case IMAGE_DATA_GRADIENT:
-			if (img->flags & IMAGE_FLAG_HAS_GRAD)
-				return save_data(file_name, img->grad.data, img->width, img->height, img->max_val);
-		break;
-
-		case IMAGE_DATA_LRO:
-			if (img->flags & IMAGE_FLAG_HAS_LRO)
-				return save_orientation_image(file_name, img);
-		break;
-
-		default:
-			return -1;
-	}
-
-	return -1;
 }

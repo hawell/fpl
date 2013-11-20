@@ -22,17 +22,34 @@
 
 #include "image.h"
 
-void gradient(image* img, int kernel);
+#define STREL_DISK	0
 
-int ridge_orientation(image* img, int radius);
+void strel(int el, int size, mat** se);
 
-void get_background(image* img, int size, image** bg);
+void dilate(mat* img, mat* strel);
+void erode(mat* img, mat* strel);
 
-void binarize(image* img, int size);
-void binarize2(image* img, int threshold);
+void gradient_x(mat* img_in, mat** img_out, int kernel);
+void gradient_y(mat* img_in, mat** img_out, int kernel);
+void gradient(mat* img_in, mat** img_out, int kernel);
 
-void thin(image* img);
+void sharpen(mat* img_in, mat** img_out);
 
+void negative(mat* img);
 
+void binarize(mat* img, int size);
+void binarize2(mat* img, int threshold);
+
+void normalize(mat* m, int min_val, int max_val);
+
+void histogram_equalization(mat* img);
+
+void clahe(mat* img, int x_count, int y_count, float clip_limit);
+
+void normalization_enhance(mat* img, int m0, int v0);
+
+void wiener_filter(mat* img, int size);
+
+void remove_background(mat* img, int size);
 
 #endif /* PROCESS_H_ */

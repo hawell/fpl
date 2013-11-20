@@ -17,14 +17,12 @@
  *  along with fpl.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "mathfuncs.h"
 #include "image.h"
-#include "filter.h"
 #include "process.h"
-#include "enhance.h"
-#include "linear.h"
 #include "clahe.h"
-#include "morph.h"
-#include "directional.h"
+#include "lro.h"
+#include "fingerprint.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -32,61 +30,40 @@
 
 int main()
 {
-	image* img;
-	int res = load_from_file("scan_02.pgm", &img);
+	mat* img;
+	int res = load_from_file("sample2.pgm", &img);
 	if (res)
+	{
 		printf("load failed\n");
+		return -1;
+	}
 
-	ridge_orientation(img, 4);
-		save_to_file("lro.pgm", img, IMAGE_DATA_LRO);
+	resize(img, 256, 256);
 
-	remove_background(img, 8);
-	save_to_file("rmbg.pgm", img, IMAGE_DATA_MAIN);
+	//	negative(img);
 
-	LDMF(img, 3);
-	save_to_file("ldmf.pgm", img, IMAGE_DATA_MAIN);
+	mat* img2;
+	convolve(img, &img2, KERNEL_GAUSSIANBLUR5x5, DIRECTION_NONE);
+	normalize(img2, 0, 255);
+	save_to_file("gsf.pgm", img2);
+	negative(img2);
 
-	clahe(img, 10, 14, 0.1);
-	save_to_file("clahe.pgm", img, IMAGE_DATA_MAIN);
-
-/*
-	remove_background(img, 8);
-	save_to_file("rmbg2.pgm", img, IMAGE_DATA_MAIN);
-
-	LDMF(img, 3);
-	save_to_file("ldmf2.pgm", img, IMAGE_DATA_MAIN);
-*/
-
-	binarize(img, 15);
-	save_to_file("bin.pgm", img, IMAGE_DATA_MAIN);
-	thin(img);
-	save_to_file("thin.pgm", img, IMAGE_DATA_MAIN);
-
-	free_image(img);
+	ridge_orientation* lro;
+	get_ridge_orientation(img2, &lro, LRO_GRAD);
 
 /*
-	wiener_filter(img, 3);
-	save_to_file("wiener.pgm", img, IMAGE_DATA_MAIN);
+	mat* img3;
+	gradient(img2, &img3, KERNEL_SOBEL3x3);
+	save_to_file("gradient.pgm", img3);
 
+	ROI(img2, img3, 16);
+	save_to_file("roi.pgm", img2);
 
+	binarize(img2, 10);
+	save_to_file("bin.pgm", img2);
 
-	save_to_file("clahe.pgm", img, IMAGE_DATA_MAIN);
-
-	binarize(img, 13);
-	save_to_file("bin.pgm", img, IMAGE_DATA_MAIN);
-*/
-/*
-	gradient(img, KERNEL_SOBEL3x3);
-	save_to_file("grad.pgm", img, IMAGE_DATA_GRADIENT);
-	remove_background(img, 10, 30);
-	save_to_file("rmbg.pgm", img, IMAGE_DATA_MAIN);
-	ridge_orientation(img, 6);
-	save_to_file("lro.pgm", img, IMAGE_DATA_LRO);
-	binarize(img);
-	save_to_file("bin.pgm", img, IMAGE_DATA_MAIN);
-	thin(img);
-	save_to_file("thin.pgm", img, IMAGE_DATA_MAIN);
-
+	thin(img2);
+	save_to_file("thin.pgm", img2);
 
 	free_image(img);
 */
