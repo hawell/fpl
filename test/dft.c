@@ -7,46 +7,45 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "mathfuncs.h"
+#include "image.h"
+#include "process.h"
 
 int main()
 {
-	double re[] = {
-			0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 9, 9, 9, 9, 0, 0,
-			0, 0, 9, 9, 9, 9, 0, 0,
-			0, 0, 9, 9, 9, 9, 0, 0,
-			0, 0, 9, 9, 9, 9, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0
-	};
-	double im[] = {
-			0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0
-	};
 
-	dft2d(1, 3, 3, re, im);
-	for (int i=0; i<64; i++)
+	mat* flt;
+	load_from_file("square.pgm", &flt);
+
+	double *fre = malloc(sizeof(double)*flt->len);
+	double *fim = malloc(sizeof(double)*flt->len);
+	for (int i=0; i<flt->len; i++)
+		fre[i] = flt->data[i]>0?1:0;
+	memset(fim, 0, sizeof(double)*flt->len);
+
+	mat* img;
+	load_from_file("resize.pgm", &img);
+
+	double *re = malloc(sizeof(double)*img->len);
+	for (int i=0; i<img->len; i++)
+		re[i] = img->data[i];
+	double *im = malloc(sizeof(double)*img->len);
+	memset(im, 0, sizeof(double)*img->len);
+
+	dft2d(1, 8, 8, re, im);
+	for (int i=0; i<img->len; i++)
 	{
-		if (i % 8 == 0)
-			printf("\n");
-		printf("%4.0lf ", sqrt(re[i]*re[i] + im[i]*im[i]));
+		re[i] = fre[i]*re[i];
+		im[i] = fre[i]*im[i];
 	}
-	dft2d(-1, 3, 3, re, im);
-	for (int i=0; i<64; i++)
+	dft2d(-1, 8, 8, re, im);
+	for (int i=0; i<img->len; i++)
 	{
-		if (i % 8 == 0)
-			printf("\n");
-		printf("%4.0lf %4.0lf ", re[i], im[i]);
+		img->data[i] = re[i];
 	}
-	printf("\n");
+	save_to_file("rdft.pgm", img);
 	return 0;
 }
