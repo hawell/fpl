@@ -31,7 +31,7 @@ void erode(mat* img, mat* strel);
 
 void gradient_x(mat* img_in, mat** img_out, int kernel);
 void gradient_y(mat* img_in, mat** img_out, int kernel);
-void gradient(mat* img_in, mat** img_out, int kernel);
+void gradient(mat* img_in, mat** img_out, mat** dir, int kernel);
 
 void sharpen(mat* img_in, mat** img_out);
 

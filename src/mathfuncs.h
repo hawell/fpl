@@ -24,6 +24,7 @@
 #define KERNEL_GSF5x5			6
 #define KERNEL_LAPLACIAN3x3	7
 #define KERNEL_MEAN5x5			8
+#define KERNEL_MEAN3x3			9
 
 #define KERNEL_SEPERABLE		100
 

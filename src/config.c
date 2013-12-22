@@ -21,7 +21,7 @@
 #include "process.h"
 
 int max_orthogonal_diff = 25;
-int lro_segment_size = 15;
+int lro_segment_size = 3;
 
 int rmbg_strel_type = STREL_DISK;
 int rmbg_strel_size = 5;

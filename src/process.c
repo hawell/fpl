@@ -135,7 +135,7 @@ void gradient_y(mat* img_in, mat** img_out, int kernel)
 	*img_out = grad_y;
 }
 
-void gradient(mat* img_in, mat** img_out, int kernel)
+void gradient(mat* img_in, mat** img_out, mat** dir, int kernel)
 {
 	mat *grad_x, *grad_y;
 
@@ -147,6 +147,21 @@ void gradient(mat* img_in, mat** img_out, int kernel)
 	for (int i=0; i<img_in->len; i++)
 		out->data[i] = sqrt(grad_x->data[i]*grad_x->data[i] + grad_y->data[i]*grad_y->data[i]);
 	normalize(out, 0, img_in->max_val);
+
+	if (dir != NULL)
+	{
+		*dir = clone_image(img_in);
+		for (int i=0; i<img_in->len; i++)
+		{
+			(*dir)->data[i] = -atan2(grad_y->data[i], grad_x->data[i])*180.0 / PI;
+
+			if ((*dir)->data[i] < 0)
+				(*dir)->data[i] = 180 + (*dir)->data[i];
+		}
+	}
+
+	free_image(grad_x);
+	free_image(grad_y);
 
 	*img_out = out;
 }

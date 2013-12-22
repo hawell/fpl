@@ -72,6 +72,12 @@ static kernel_seperable mean5x5 = {
 		5,5
 };
 
+static kernel_seperable mean3x3 = {
+		{1/3.0f, 1/3.0f, 1/3.0f},
+		{1/3.0f, 1/3.0f, 1/3.0f},
+		3,3
+};
+
 static kernel_normal gaussian_blur5x5 = {
 	{
 		2/159.0f, 4/159.0f, 5/159.0f, 4/159.0f, 2/159.0f,
@@ -100,6 +106,7 @@ int convolve(mat* img_in, mat** out, int krnl, int dir)
 			case KERNEL_GSF5x5:k = &gsf5x5;break;
 			case KERNEL_LAPLACIAN3x3:k = &laplacian3x3;break;
 			case KERNEL_MEAN5x5:k = &mean5x5;break;
+			case KERNEL_MEAN3x3:k = &mean3x3;break;
 
 			default:
 			{
@@ -108,7 +115,7 @@ int convolve(mat* img_in, mat** out, int krnl, int dir)
 			}
 		}
 
-		if (dir == DIRECTION_VERTICAL)
+		if (dir == DIRECTION_HORIZONTAL)
 			convolve2DSeparable(img_in->data, (*out)->data, img_in->width, img_in->height,
 					k->row, k->row_count, k->column, k->column_count);
 		else
