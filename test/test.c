@@ -31,86 +31,51 @@
 int main()
 {
 	mat* orig;
-	int res = load_from_file("test.pgm", &orig);
+	int res = load_from_file("resize.pgm", &orig);
 	if (res)
 	{
 		printf("load failed\n");
 		return -1;
 	}
 
-	resize(orig, 256, 256);
-
 	mat* smooth;
-	convolve(orig, &smooth, KERNEL_GSF5x5, DIRECTION_NONE);
+	convolve(orig, &smooth, KERNEL_GAUSSIANBLUR5x5, DIRECTION_NONE);
 
 	save_to_file("smooth.pgm", smooth);
 
-	mat* grad;
+	histogram_equalization(smooth);
+
+	save_to_file("smooth2.pgm", smooth);
+
+
+	mat *grad, *gx, *gy;
 	mat* dir;
 
-	gradient(smooth, &grad, &dir, KERNEL_NRIGO7x5);
+	gradient_x(smooth, &gx, KERNEL_SOBEL3x3);
+	save_to_file("gx.pgm", gx);
+
+	gradient_y(smooth, &gy, KERNEL_SOBEL3x3);
+	save_to_file("gy.pgm", gy);
+
+	gradient(smooth, &grad, &dir, KERNEL_SOBEL3x3);
 
 	save_to_file("grad.pgm", grad);
 
 	ridge_orientation* lro;
-	lro_gradient(grad, dir, 7, 4, &lro);
-	save_orientation_image("lro.pgm", lro);
+	lro_stdev(grad, 7, 16, &lro);
+	save_orientation_image("lro6.pgm", lro);
 
-	for (int i=1; i<dir->height-1; i++)
-		for (int j=1; j<dir->width-1; j++)
-		{
-			double theta = (dir->data[(i)*dir->width + j]*grad->data[(i)*grad->width + j] +
-					dir->data[(i-1)*dir->width + j]*grad->data[(i-1)*grad->width + j] + dir->data[(i+1)*dir->width + j]*grad->data[(i+1)*grad->width + j] +
-					dir->data[(i)*dir->width + j-1]*grad->data[(i)*grad->width + j-1] + dir->data[(i)*dir->width + j+1]*grad->data[(i)*grad->width + j+1] +
-					dir->data[(i-1)*dir->width + j+1]*grad->data[(i-1)*grad->width + j+1] + dir->data[(i+1)*dir->width + j+1]*grad->data[(i+1)*grad->width + j+1] +
-					dir->data[(i-1)*dir->width + j-1]*grad->data[(i-1)*grad->width + j-1] + dir->data[(i+1)*dir->width + j]*grad->data[(i+1)*grad->width + j]) / grad->max_val*9.0;
+	LDMF(smooth, lro, 5);
 
-			int n1, n2;
-			if (theta < 22.5)
-			{
-				n1 = grad->data[i*grad->width + j-1];
-				n2 = grad->data[i*grad->width + j+1];
-			}
-			else if (theta < 67.5)
-			{
-				n1 = grad->data[(i-1)*grad->width + j+1];
-				n2 = grad->data[(i+1)*grad->width + j-1];
-			}
-			else if (theta < 112.5)
-			{
-				n1 = grad->data[(i-1)*grad->width + j];
-				n2 = grad->data[(i+1)*grad->width + j];
-			}
-			else if (theta < 157.5)
-			{
-				n1 = grad->data[(i-1)*grad->width + j-1];
-				n2 = grad->data[(i+1)*grad->width + j+1];
-			}
-			else
-			{
-				n1 = grad->data[i*grad->width + j-1];
-				n2 = grad->data[i*grad->width + j+1];
-			}
-			int* n = &grad->data[i*grad->width + j];
-			if (*n < n1 || *n < n2)
-				*n = 0;
-		}
+	save_to_file("ldmf.pgm", smooth);
 
-	save_to_file("nmsup2.pgm", grad);
+	binarize(smooth, 10);
 
-	for (int i=0; i<grad->height; i++)
-		for (int j=0; j<grad->width; j++)
-		{
-			int* pos = &grad->data[i*grad->width + j];
-			if (*pos > 50)
-				*pos = 255;
-			else if (*pos > 20)
-				*pos = 128;
-			else
-				*pos = 0;
-		}
+	save_to_file("bin.pgm", smooth);
 
-	save_to_file("dthresh.pgm", grad);
+	thin(smooth);
+
+	save_to_file("thin.pgm", smooth);
 
 	return 0;
 }

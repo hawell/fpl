@@ -20,7 +20,9 @@ typedef struct {
 
 int save_orientation_image(char* file_name, ridge_orientation* lro);
 
-int lro_gradient(mat* grad, mat* grad_dir, int seg_size, int dir_count, ridge_orientation** lro);
+int lro_gradient(mat* img, int seg_size, int dir_count, ridge_orientation** lro);
+int lro_stdev(mat* img, int seg_size, int dir_count, ridge_orientation** lro);
+int lro_stdev2(mat* img, int seg_size, int dir_count, ridge_orientation** lro);
 
 
 #endif /* LRO_H_ */
